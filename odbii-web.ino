@@ -3,7 +3,7 @@
 
  
 const char* ssid = "BinCity";
-const char* password = "oooh";
+const char* password = "we love wifly";
  
 int blueRX   = D3;  //grey
 int blueTX   = D2;  //white
@@ -43,7 +43,7 @@ void loop() {
  // Check if there is anything coming in from Serial
   if (Serial.available() > 0) {
     while ( auto inByte = Serial.read()) {
-      Serial.print(inByte);
+       Serial.write(inByte);
        bluetooth.write(inByte);
     }
   }
