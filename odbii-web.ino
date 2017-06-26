@@ -9,11 +9,15 @@ int blueRX   = D3;  //grey
 int blueTX   = D2;  //white
 
 WiFiServer server(80);
-SoftwareSerial bluetooth(blueRX, blueTX);
+SoftwareSerial Odb(blueRX, blueTX);
  
 void setup() {
   Serial.begin(115200);
-  bluetooth.begin(9600);
+  Odb.begin(38400);
+
+
+  /*
+  Let's leave this out, until the serial communication works
 
   Serial.print("Connecting to ");
   Serial.println(ssid);
@@ -36,25 +40,85 @@ void setup() {
   Serial.print("http://");
   Serial.print(WiFi.localIP());
   Serial.println("/");
+  */
  
 }
  
 void loop() {
- // Check if there is anything coming in from Serial
-  if (Serial.available() > 0) {
-    while ( auto inByte = Serial.read()) {
-       Serial.write(inByte);
-       bluetooth.write(inByte);
+  Serial.flush();
+  Odb.flush();
+    
+  char return_values[20];
+  int num_bytes = send_odb_cmd("0113", return_values, 1); // O2 sensors present
+  char o2sensors_present = return_values[0];
+  Serial.printf("Got expected 1 byte, %x (O2 sensors present, 2 banks)\n", o2sensors_present);
+
+  // First 8 oxygen sensors
+  for (int i=0 ; i < 8 ; i++) {
+    if (1 << i & o2sensors_present) {
+      char cmd_buf[8];
+      snprintf(cmd_buf, sizeof(cmd_buf), "011%x", 4 + i);   
+      num_bytes = send_odb_cmd(cmd_buf, return_values, 2); // O2 sensors present
+      Serial.printf("Got 2 bytes 0x%x%x; sensor[%d], %fV, short fuel trim = %f\n", 
+        return_values[0], return_values[1], i,
+        float(return_values[0]/200), // Voltage
+        float(((return_values[1] * 100) / 128) - 100)); // 
+
+      snprintf(cmd_buf, sizeof(cmd_buf), "012%x", 4 + i); 
+      num_bytes = send_odb_cmd(cmd_buf, return_values, 4);
+      Serial.printf("Got 4 bytes, 0x%x%x%x; sensor[%d] %fV, fuel air ratio= %f\n",
+        return_values[0], return_values[1], return_values[2], return_values[3], i, 
+        float(((256 * return_values[2]) + return_values[3]) * 8 / 65536), // Voltage
+        float(((256 * return_values[0]) + return_values[1]) * 8 / 65536)); // Fuel-air
+    } else {
+      Serial.printf("Skipping sensor %d, not present");
     }
   }
-  // Check if there is anything coming from Bluetooth
-  if (bluetooth.available() > 0 ) {
-    Serial.write('-');
-    while ( auto outByte = bluetooth.read()) {
-       Serial.write(outByte);
+  num_bytes = send_odb_cmd("011D", return_values, 1);
+  Serial.printf("Got expected 1 byte, %x (o2 present, 4 banks)\n", return_values[0]);
+
+
+  if ( send_odb_cmd("0106", return_values, 1) == 1) {
+    Serial.printf("Got 1 bytes, short-term fuel trim, bank 1 %2.2f\n", return_values[0]);
+  }
+  if ( send_odb_cmd("0107", return_values, 1) == 1) {
+    Serial.printf("Got 1 bytes, long-term fuel trim, bank 1 %2.2f\n", return_values[0]);
+  }
+  if ( send_odb_cmd("0108", return_values, 1) == 1) {
+    Serial.printf("Got 1 bytes, short-term fuel trim, bank 2 %2.2f\n", return_values[0]);
+  }
+  if ( send_odb_cmd("0109", return_values, 1) == 1) {
+    Serial.printf("Got 1 bytes, long-term fuel trim, bank 2 %2.2f\n", return_values[0]);
+  }
+
+}
+
+int send_odb_cmd(char *odb_cmd, char *return_values, int expected_bytes) {
+  int return_bytes = 0;
+  Serial.printf("sending: %s\n", odb_cmd);
+  Odb.println(odb_cmd);
+  while(! Odb.available()) {
+    delay(50); // wait 50ms until there is data
+  }
+  
+  while(Odb.available()) {
+    char data = Odb.read();
+    if (data == '\r') {
+      if (return_bytes != expected_bytes) {
+        Serial.printf("Did not get bytes as expected: %d != %d", expected_bytes, return_bytes);
+      }
+      return return_bytes;
     }
+    if ( return_bytes >= sizeof(return_values)) {
+      return_values[return_bytes]=0;
+      Serial.printf("Got too much data: [%s]\n", return_values);
+    }
+    return_values[return_bytes++] = data;
   }
 }
+  
+
+
   
   /*
   // Check if a client has connected
