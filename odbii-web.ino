@@ -49,9 +49,23 @@ void loop() {
   Odb.flush();
     
   char return_values[20];
+
+  Serial.println("ATRV");
+  Odb.println("ATRV");
+  while(!Odb.available()) {
+    delay(100);
+  }
+  while(Odb.available()) {
+    char data = Odb.read();
+    Serial.print(data);
+  }
+  Serial.println(" - alive!");
+
   int num_bytes = send_odb_cmd("0113", return_values, 1); // O2 sensors present
   char o2sensors_present = return_values[0];
   Serial.printf("Got expected 1 byte, %x (O2 sensors present, 2 banks)\n", o2sensors_present);
+
+
 
   // First 8 oxygen sensors
   for (int i=0 ; i < 8 ; i++) {
