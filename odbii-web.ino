@@ -4,13 +4,17 @@
  
 const char* ssid = "BinCity";
 const char* password = "we love wifly";
- 
+const char* SEARCHING = "SEARCHING";
+const char* NODATA = "NO DATA";
+
 int blueRX   = D3;  //grey
 int blueTX   = D2;  //white
 
 WiFiServer server(80);
 SoftwareSerial Odb(blueRX, blueTX);
- 
+
+#define BUF_LEN 120
+
 void setup() {
   Serial.begin(115200);
   Odb.begin(38400);
@@ -47,19 +51,51 @@ void setup() {
 void loop() {
   Serial.flush();
   Odb.flush();
-    
-  char return_values[20];
 
-  Serial.println("ATRV");
-  Odb.println("ATRV");
-  while(!Odb.available()) {
-    delay(100);
-  }
-  while(Odb.available()) {
-    char data = Odb.read();
-    Serial.print(data);
-  }
-  Serial.println(" - alive!");
+  char results[BUF_LEN];
+  send_odb_cmd("ATZ"); // full reset
+  send_odb_cmd("ATI"); // identification
+  send_odb_cmd("AT/N"); // serial numbers
+  send_odb_cmd("ATRV"); // voltage
+
+  send_odb_cmd("0100", "01-20 PIDs supported", results, 100);
+  send_odb_cmd("0120", "21-40 PIDs supported", results, 100);
+  send_odb_cmd("0140", "41-60 PIDs supported", results, 100);
+  send_odb_cmd("0160", "61-80 PIDs supported", results, 100);
+  send_odb_cmd("0180", "81-A0 PIDs supported", results, 100);
+
+
+  send_odb_cmd("0101", "monitor status", results, 100);
+  send_odb_cmd("0103", "fuel status", results, 100);
+  send_odb_cmd("0104", "engine load", results, 100);
+  send_odb_cmd("0105", "coolant temp", results, 100);
+  send_odb_cmd("0106", "short term fuel trim b1", results, 100);
+  send_odb_cmd("0107", "long term fuel trim b1", results, 100);
+  send_odb_cmd("0108", "short term fuel trim b2", results, 100);
+  send_odb_cmd("0109", "long term fuel trim b2", results, 100);
+  send_odb_cmd("010A", "fuel pressure", results, 100);
+  send_odb_cmd("010B", "intake pressure", results, 100);
+  send_odb_cmd("010C", "engine rpm", results, 100);
+  send_odb_cmd("010D", "vehicle speed", results, 100);
+  send_odb_cmd("010E", "timing advance", results, 100);
+  send_odb_cmd("010F", "intake air temp", results, 100);
+  send_odb_cmd("0110", "MAF airflow rate", results, 100);
+  send_odb_cmd("0111", "throttle position", results, 100);
+  send_odb_cmd("0113", "O2 sensors present", results, 100);
+  send_odb_cmd("011C", "ODB standards", results, 100);
+  send_odb_cmd("011D", "O2 sensors present in 4 banks", results, 100);
+  send_odb_cmd("011F", "runtime", results, 100);
+  send_odb_cmd("0133", "barometric pressure", results, 100);
+  send_odb_cmd("0142", "Control module voltage", results, 100);
+  send_odb_cmd("0146", "ambient air temp", results, 100);
+  send_odb_cmd("014F", "max val for sensor ratios", results, 100);
+  send_odb_cmd("0150", "max val airflow rate", results, 100);
+  send_odb_cmd("0151", "fuel type", results, 100);
+  send_odb_cmd("015C", "Engine Oil Temp", results, 100);
+  send_odb_cmd("015E", "Engine Fuel rate", results, 100);
+  send_odb_cmd("0151", "fuel type", results, 100);
+
+  send_odb_cmd("ATPC", "close session", results, 100);
 
   int num_bytes = send_odb_cmd("0113", return_values, 1); // O2 sensors present
   char o2sensors_present = return_values[0];
@@ -107,28 +143,53 @@ void loop() {
 
 }
 
-int send_odb_cmd(char *odb_cmd, char *return_values, int expected_bytes) {
-  int return_bytes = 0;
+// Returns length of line read
+int get_odb_line(char *buffer, int buffer_len) {
+  int i = 0;
+  // Stop one before buffer_len in case it's a long line
+  for(i=0; i< buffer_len; i++) {
+    while(!Odb.available()) {
+      delay(50);
+    }
+    char data = Odb.read();
+    if(data == '\r') {
+      buffer[i] = '\0';
+      return i;
+    } else {
+      buffer[i] = data;
+    }
+  }
+  buffer[buffer_len-1] = '\0';
+  Serial.printf("buffer overflow at pos [%d]! [%s]\n", buffer_len, buffer);
+  return buffer_len-1;
+}
+
+int send_odb_cmd(char *odb_cmd, char *comment, char *results, int pause) {
+  Serial.printf("sending: %s\n", odb_cmd);
+  delay(pause);
+  char odb_buffer[120];
+  while(Odb.available()) {
+    get_odb_line(odb_buffer);
+    Serial.printf("Read In: [%s]\n", odb_buffer);
+    if strncmp(odb_buffer, SEARCHING, sizeof(SEARCHING)) {
+      Serial.println("  Searching..(wait 2s) ");
+      delay(2000);
+    } else if (strncmp(odb_buffer, NODATA, sizeof(NODATA)) {
+      Serial.println("  No Data");
+    } else if (odb_buffer[0] == '\0') {
+      Serial.println("  empty line");
+    } else {
+      Serial.printf("  %s <= [%s]\n", comment, results);
+      strncpy(odb_buffer, results, BUF_LEN);
+    }
+  }
+  return 0;
+}
+
+int send_odb_line(char *odb_cmd) {
   Serial.printf("sending: %s\n", odb_cmd);
   Odb.println(odb_cmd);
-  while(! Odb.available()) {
-    delay(50); // wait 50ms until there is data
-  }
-  
-  while(Odb.available()) {
-    char data = Odb.read();
-    if (data == '\r') {
-      if (return_bytes != expected_bytes) {
-        Serial.printf("Did not get bytes as expected: %d != %d", expected_bytes, return_bytes);
-      }
-      return return_bytes;
-    }
-    if ( return_bytes >= sizeof(return_values)) {
-      return_values[return_bytes]=0;
-      Serial.printf("Got too much data: [%s]\n", return_values);
-    }
-    return_values[return_bytes++] = data;
-  }
+  return 0;
 }
   
 
