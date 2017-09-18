@@ -1,7 +1,5 @@
-#include <ESP8266WiFi.h>
 #include <SoftwareSerial.h>
 
- 
 const char* ssid = "BinCity";
 const char* password = "we love wifly";
 const char* SEARCHING = "SEARCHING";
@@ -18,41 +16,12 @@ SoftwareSerial Odb(blueRX, blueTX);
 void setup() {
   Serial.begin(115200);
   Odb.begin(38400);
-
-
-  /*
-  Let's leave this out, until the serial communication works
-
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-  WiFi.begin(ssid, password);
- 
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(100);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.println("WiFi connected");
- 
-  // Start the server
-  server.begin();
-  Serial.println("Server started");
-
- 
-  // Print the IP address
-  Serial.print("Use this URL to connect: ");
-  Serial.print("http://");
-  Serial.print(WiFi.localIP());
-  Serial.println("/");
-  */
- 
 }
  
 void loop() {
   Serial.flush();
   Odb.flush();
-
-  char results[BUF_LEN];
+  char read_line[BUF_LEN];
   send_odb_cmd("ATZ"); // full reset
   send_odb_cmd("ATI"); // identification
   send_odb_cmd("AT/N"); // serial numbers
@@ -102,7 +71,6 @@ void loop() {
   Serial.printf("Got expected 1 byte, %x (O2 sensors present, 2 banks)\n", o2sensors_present);
 
 
-
   // First 8 oxygen sensors
   for (int i=0 ; i < 8 ; i++) {
     if (1 << i & o2sensors_present) {
@@ -141,25 +109,25 @@ void loop() {
     Serial.printf("Got 1 bytes, long-term fuel trim, bank 2 %2.2f\n", return_values[0]);
   }
 
+  Serial.println("Sleeping for 5 seconds..");
+  delay(5000);
 }
 
 // Returns length of line read
 int get_odb_line(char *buffer, int buffer_len) {
   int i = 0;
+  int data = '\0';
   // Stop one before buffer_len in case it's a long line
-  for(i=0; i< buffer_len; i++) {
-    while(!Odb.available()) {
-      delay(50);
-    }
-    char data = Odb.read();
-    if(data == '\r') {
+  while (i < buffer_len && data != '\r') {
+    while (data < 1) data = Odb.read();
+    if (data == '\r') {
       buffer[i] = '\0';
       return i;
     } else {
-      buffer[i] = data;
+      buffer[i++] = data;
     }
   }
-  buffer[buffer_len-1] = '\0';
+  buffer[i-1] = '\0';
   Serial.printf("buffer overflow at pos [%d]! [%s]\n", buffer_len, buffer);
   return buffer_len-1;
 }
@@ -167,32 +135,64 @@ int get_odb_line(char *buffer, int buffer_len) {
 int send_odb_cmd(char *odb_cmd, char *comment, char *results, int pause) {
   Serial.printf("sending: %s\n", odb_cmd);
   delay(pause);
-  char odb_buffer[120];
-  while(Odb.available()) {
-    get_odb_line(odb_buffer);
+  char odb_buffer[BUF_LEN];
+  while(get_odb_line(odb_buffer) && odb_buffer[0])  {
     Serial.printf("Read In: [%s]\n", odb_buffer);
-    if strncmp(odb_buffer, SEARCHING, sizeof(SEARCHING)) {
+    if !strncmp(odb_buffer, SEARCHING, sizeof(SEARCHING)) {
       Serial.println("  Searching..(wait 2s) ");
       delay(2000);
-    } else if (strncmp(odb_buffer, NODATA, sizeof(NODATA)) {
+    } else if (!strncmp(odb_buffer, NODATA, sizeof(NODATA)) {
       Serial.println("  No Data");
-    } else if (odb_buffer[0] == '\0') {
-      Serial.println("  empty line");
     } else {
       Serial.printf("  %s <= [%s]\n", comment, results);
-      strncpy(odb_buffer, results, BUF_LEN);
+      strncpy(results, odb_buffer, BUF_LEN);
     }
   }
   return 0;
 }
 
-int send_odb_line(char *odb_cmd) {
-  Serial.printf("sending: %s\n", odb_cmd);
-  Odb.println(odb_cmd);
-  return 0;
+char *putOdbResponse(char *command){
+  Odb.println(command);
+  delay(500);
 }
   
-
+// The getOdbResponse function collects incoming data from the UART into the rxData buffer
+// and only exits when a carriage return character is seen. Once the carriage return
+// string is detected, the rxData buffer is null terminated (so we can treat it as a string)
+// and the rxData index is reset to 0 so that the next string can be copied.
+char *getOdbResponse(void){
+  char inChar=0; 
+  rxIndex = 0;
+  while(inChar != '\r'){
+    if(Odb.available() > 0){
+      //Start by checking if we've received the end of message character ('\r').
+      if(Odb.peek() == '\r'){
+        //Clear the Serial buffer
+        inChar=Odb.read();
+        //Put the end of string character on our data string
+        rxData[rxIndex]='\0';
+        //Reset the buffer index so that the next character goes back at the beginning of the string.
+        rxIndex=0;
+        if(Odb.available() > 0 && Odb.peek() == '\r'){
+          inChar=Odb.read();
+        }
+      } else {
+        inChar = Odb.read();
+        if(rxIndex > 0 || inChar != '>') { // Ignore prompts
+          rxData[rxIndex++]=inChar;
+        }
+      }
+    } else {
+      delay(100);
+      Serial.print(".");    
+    }
+  }
+  if(strncmp(rxData, "SEARCHING...", sizeof(rxData))) {
+    delay(500);
+    getOdbResponse();
+  }
+  return rxData;
+}
 
   
   /*
