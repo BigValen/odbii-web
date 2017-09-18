@@ -1,7 +1,5 @@
-#include <ESP8266WiFi.h>
 #include <SoftwareSerial.h>
 
- 
 const char* ssid = "BinCity";
 const char* password = "we love wifly";
 const char* SEARCHING = "SEARCHING";
@@ -18,34 +16,6 @@ SoftwareSerial Odb(blueRX, blueTX);
 void setup() {
   Serial.begin(115200);
   Odb.begin(38400);
-
-
-  /*
-  Let's leave this out, until the serial communication works
-
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-  WiFi.begin(ssid, password);
- 
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(100);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.println("WiFi connected");
- 
-  // Start the server
-  server.begin();
-  Serial.println("Server started");
-
- 
-  // Print the IP address
-  Serial.print("Use this URL to connect: ");
-  Serial.print("http://");
-  Serial.print(WiFi.localIP());
-  Serial.println("/");
-  */
- 
 }
  
 void loop() {
@@ -101,8 +71,31 @@ void loop() {
   char o2sensors_present = return_values[0];
   Serial.printf("Got expected 1 byte, %x (O2 sensors present, 2 banks)\n", o2sensors_present);
 
+  putOdbResponse("ATE0");
+  Serial.println(getOdbResponse()); // disable echo
 
+  putOdbResponse("ATRV");
+  Serial.printf("battery voltage: %s\n", getOdbResponse());
 
+  putOdbResponse("ATSP0");
+  Serial.printf("Autoselect: %s\n", getOdbResponse()); // autoselect protocol
+  
+  putOdbResponse("ATSP0");
+  Serial.printf("Protocol: %s\n", getOdbResponse()); // print protocol
+
+  putOdbResponse("0100");
+  Serial.printf("Supported: %s\n", getOdbResponse()); // ask what PIDs are supported
+
+  delay(20000);
+  return; 
+  for(int i = 1; i < 136 ; i++) { // print out everything
+    snprintf(cmd_buffer, sizeof(cmd_buffer), "01%02x", i);
+    putOdbResponse(cmd_buffer);
+    Serial.printf("%s : %s\n", cmd_buffer, getOdbResponse()); 
+  }
+
+  return;
+/*
   // First 8 oxygen sensors
   for (int i=0 ; i < 8 ; i++) {
     if (1 << i & o2sensors_present) {
@@ -140,7 +133,9 @@ void loop() {
   if ( send_odb_cmd("0109", return_values, 1) == 1) {
     Serial.printf("Got 1 bytes, long-term fuel trim, bank 2 %2.2f\n", return_values[0]);
   }
-
+  */
+  Serial.println("Sleeping for 5 seconds..");
+  delay(5000);
 }
 
 // Returns length of line read
@@ -186,13 +181,48 @@ int send_odb_cmd(char *odb_cmd, char *comment, char *results, int pause) {
   return 0;
 }
 
-int send_odb_line(char *odb_cmd) {
-  Serial.printf("sending: %s\n", odb_cmd);
-  Odb.println(odb_cmd);
-  return 0;
+char *putOdbResponse(char *command){
+  Odb.println(command);
+  delay(500);
 }
   
-
+// The getOdbResponse function collects incoming data from the UART into the rxData buffer
+// and only exits when a carriage return character is seen. Once the carriage return
+// string is detected, the rxData buffer is null terminated (so we can treat it as a string)
+// and the rxData index is reset to 0 so that the next string can be copied.
+char *getOdbResponse(void){
+  char inChar=0; 
+  rxIndex = 0;
+  while(inChar != '\r'){
+    if(Odb.available() > 0){
+      //Start by checking if we've received the end of message character ('\r').
+      if(Odb.peek() == '\r'){
+        //Clear the Serial buffer
+        inChar=Odb.read();
+        //Put the end of string character on our data string
+        rxData[rxIndex]='\0';
+        //Reset the buffer index so that the next character goes back at the beginning of the string.
+        rxIndex=0;
+        if(Odb.available() > 0 && Odb.peek() == '\r'){
+          inChar=Odb.read();
+        }
+      } else {
+        inChar = Odb.read();
+        if(rxIndex > 0 || inChar != '>') { // Ignore prompts
+          rxData[rxIndex++]=inChar;
+        }
+      }
+    } else {
+      delay(100);
+      Serial.print(".");    
+    }
+  }
+  if(strncmp(rxData, "SEARCHING...", sizeof(rxData))) {
+    delay(500);
+    getOdbResponse();
+  }
+  return rxData;
+}
 
   
   /*
