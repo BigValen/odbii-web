@@ -83,8 +83,8 @@ int get_odb_line(char *buf, int buffer_len) {
   // Stop one before buffer_len in case it's a long line
   while (i < buffer_len - 1) {
     while (!data) {
+      delay(50); // delay before trying to get something
       data = Odb.available();
-      delay(100);
     }
     data = Odb.read();
 
@@ -100,20 +100,30 @@ int get_odb_line(char *buf, int buffer_len) {
 
 
 int send_odb_cmd(const char *odb_cmd, const char *comment, char *buf) {
-  Serial.print("[ "); Serial.println(odb_cmd);
+  Serial.print("sending: "); Serial.println(odb_cmd);
   Odb.print(odb_cmd); Odb.print("\r");
 
-  while(get_odb_line(odb_buffer, BUF_LEN) && odb_buffer[0])  {
+  get_odb_line(odb_buffer, BUF_LEN):
+  Serial.print("  got line, should be empty [");
+  Serial.print(odb_buffer);
+  Serial.println("]");
+  get_odb_line(odb_buffer, BUF_LEN):
+  Serial.print("  got line, should be empty [");
+  Serial.print(odb_buffer);
+  Serial.println("]");
+
+  while(get_odb_line(odb_buffer, BUF_LEN))  {
     if(!strncmp(odb_buffer, SEARCHING, strlen(SEARCHING))) { // read another line
       Serial.println("  Searching..(wait 2s) ");
     } else if(!strncmp(odb_buffer, NODATA, strlen(NODATA))) { // read another line
       Serial.println("  No Data");
-    } else if(odb_buffer[0] == 0) { // If we get 0, that means we got a \r\r, EOT
+    } else if(odb_buffer[0] == 0) { // If we get 0, that means we got a \r, EOT
+      Serial.println("  Got \r");
       return strlen(buf);
     } else {
       strncpy(buf, odb_buffer, BUF_LEN);
-      Serial.print(comment); Serial.print(" <= "); Serial.println(odb_buffer);
-      Serial.print(comment); Serial.print(" <- "); Serial.println(buf);
+      Serial.print(comment); Serial.print(" <= ODB "); Serial.println(odb_buffer);
+      Serial.print(comment); Serial.print(" <- BUF "); Serial.println(buf);
     }
   }
   return 0;
