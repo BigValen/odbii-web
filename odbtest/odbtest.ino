@@ -34,6 +34,37 @@ void loop() {
   //send_odb_cmd("AT/N", "serial", read_line, 500); // serial numbers
   send_odb_cmd("ATRV", "voltage", read_line, 100); // voltage
 
+  send_odb_cmd("0101", "monitor status", read_line, 100);
+  send_odb_cmd("0103", "fuel status", read_line, 100);
+  send_odb_cmd("0104", "engine load", read_line, 100);
+  send_odb_cmd("0105", "coolant temp", read_line, 100);
+  send_odb_cmd("0106", "short term fuel trim b1", read_line, 100);
+  send_odb_cmd("0107", "long term fuel trim b1", read_line, 100);
+  send_odb_cmd("0108", "short term fuel trim b2", read_line, 100);
+  send_odb_cmd("0109", "long term fuel trim b2", read_line, 100);
+  send_odb_cmd("010A", "fuel pressure", read_line, 100);
+  send_odb_cmd("010B", "intake pressure", read_line, 100);
+  send_odb_cmd("010C", "engine rpm", read_line, 100);
+  send_odb_cmd("010D", "vehicle speed", read_line, 100);
+  send_odb_cmd("010E", "timing advance", read_line, 100);
+  send_odb_cmd("010F", "intake air temp", read_line, 100);
+  send_odb_cmd("0110", "MAF airflow rate", read_line, 100);
+  send_odb_cmd("0111", "throttle position", read_line, 100);
+  send_odb_cmd("0113", "O2 sensors present", read_line, 100);
+  send_odb_cmd("011C", "ODB standards", read_line, 100);
+  send_odb_cmd("011D", "O2 sensors present in 4 banks", read_line, 100);
+  send_odb_cmd("011F", "runtime", read_line, 100);
+  send_odb_cmd("0133", "barometric pressure", read_line, 100);
+  send_odb_cmd("0142", "Control module voltage", read_line, 100);
+  send_odb_cmd("0146", "ambient air temp", read_line, 100);
+  send_odb_cmd("014F", "max val for sensor ratios", read_line, 100);
+  send_odb_cmd("0150", "max val airflow rate", read_line, 100);
+  send_odb_cmd("0151", "fuel type", read_line, 100);
+  send_odb_cmd("015C", "Engine Oil Temp", read_line, 100);
+  send_odb_cmd("015E", "Engine Fuel rate", read_line, 100);
+  send_odb_cmd("0151", "fuel type", read_line, 100);
+
+
   send_odb_cmd("0100", "01-20 PIDs supported", read_line, 100);
   // should be  "00 03 07 08 09 12 17 24 28 29"
   int pid_count = decode_bytes(read_line, commandlist);
@@ -49,17 +80,6 @@ void loop() {
   send_odb_cmd("0140", "41-60 PIDs supported", read_line, 100);
   send_odb_cmd("0160", "61-80 PIDs supported", read_line, 100);
   send_odb_cmd("0180", "81-A0 PIDs supported", read_line, 100);
-  send_odb_cmd("0103", "fuel status", read_line, 100);
-  send_odb_cmd("0106", "short term fuel trim b1", read_line, 100);
-  send_odb_cmd("0107", "long term fuel trim b1", read_line, 100);
-  send_odb_cmd("0108", "short term fuel trim b2", read_line, 100);
-  send_odb_cmd("0109", "long term fuel trim b2", read_line, 100);
-  send_odb_cmd("010C", "engine rpm", read_line, 100);
-  send_odb_cmd("0111", "throttle position", read_line, 100);
-  send_odb_cmd("0118", "O2 sensors 5", read_line, 100);
-  send_odb_cmd("011C", "ODB standards", read_line, 100);
-  send_odb_cmd("011D", "O2 sensors present in 4 banks", read_line, 100);
-
   Serial.println("Sleeping for 25 seconds..");
 delay(25000);
 }
@@ -77,7 +97,8 @@ int send_odb_cmd(const char *odb_cmd, const char *comment, char *buf, int pause)
     //Serial.print("got ");
     //Serial.println(got);
     if(!strncmp(odb_buffer, SEARCHING, strlen(SEARCHING))) {
-      Serial.println("  Searching..(wait 2s) ");
+      Serial.println("  Searching..(waiting 2s) ");
+      delay(2000);
     } else if(!strncmp(odb_buffer, NODATA, strlen(NODATA))) {
       Serial.println("  No Data");
     } else if(got <= 2) {
@@ -87,7 +108,7 @@ int send_odb_cmd(const char *odb_cmd, const char *comment, char *buf, int pause)
       //Serial.print("copying into odbbuffer- got ");
       //Serial.print(got);
       //Serial.print(" bytes. Content: [");
-      Serial.print(odb_buffer);
+      Serial.println(odb_buffer);
       //Serial.println("]");
     }
   }
