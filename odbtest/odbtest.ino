@@ -166,7 +166,7 @@ void print_text_odb_cmd(char *odb_string, const char *comment, char *buf) {
 
 char *send_odb_cmd(char *odb_cmd, const char *comment, char *buf) {
   Odb.print(odb_cmd); Odb.print("\r");
-  odb_buffer[0] = '\0';
+  buf[0] = '\0';
 
   while(int got = get_odb_line(odb_buffer, BUF_LEN))  {
     if(!strncmp(odb_buffer, SEARCHING, strlen(SEARCHING))) {
